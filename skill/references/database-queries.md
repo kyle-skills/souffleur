@@ -107,7 +107,7 @@ SELECT session_id FROM orchestration_tasks WHERE task_id = 'task-00';
 ```sql
 SELECT state FROM orchestration_tasks WHERE task_id = 'task-00';
 ```
-Exit if `state = 'complete'`.
+Exit if `state = 'complete'` or `state = 'context_recovery'`.
 </core>
 
 <guidance>

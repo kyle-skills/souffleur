@@ -108,7 +108,7 @@ Layer details: timing constants, poll cycles, exit reasons, awaiting_session_id 
 </reference>
 
 <reference path="references/subagent-prompts.md" load="required">
-Verbatim prompts for watcher subagent, teammate self-monitor, and Conductor relaunch command.
+Verbatim prompts for watcher subagent and teammate self-monitor.
 </reference>
 
 <guidance>
@@ -120,18 +120,22 @@ See examples/example-initial-launch.md for a complete bootstrap-to-WATCHING walk
 <core>
 ## Conductor Relaunch Protocol
 
-When the watcher exits with `CONDUCTOR_DEAD`, execute the six-step relaunch sequence:
+When the watcher exits with `CONDUCTOR_DEAD` or `CONTEXT_RECOVERY`, execute the six-step relaunch sequence:
 
 1. **Kill old Conductor** — guard with `kill -0` before `kill`
 2. **Export conversation log** — `claude-export $SESSION_ID`
 3. **Size check & truncation** — if export >800k chars, truncate to summary + tail
-4. **Launch new Conductor** — new kitty window with recovery context
+4. **Launch new Conductor** — select launch prompt by exit reason (crash vs context recovery)
 5. **Retry tracking** — increment counter, reset on progress (new tasks), exit at 3
 6. **Relaunch monitoring** — new watcher (`awaiting_session_id=true`), kill+relaunch teammate
 </core>
 
 <reference path="references/conductor-relaunch.md" load="required">
 Full 6-step procedure with bash commands, retry logic, and monitoring layer relaunch.
+</reference>
+
+<reference path="references/conductor-launch-prompts.md" load="required">
+Verbatim launch templates for crash recovery and context recovery Conductor sessions.
 </reference>
 
 <guidance>
@@ -166,6 +170,7 @@ VALIDATING → SETTLING → WATCHING → EXITED
 | Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Relaunch sequence (Section 4) |
 | Watcher exits | `SESSION_ID_FOUND:{id}` | Update session ID, new watcher (normal mode) |
 | Watcher exits | `CONDUCTOR_COMPLETE` | Clean shutdown |
+| Watcher exits | `CONTEXT_RECOVERY` | Relaunch sequence (Section 4) |
 | Teammate message | `WATCHER_DEAD` | New watcher (same mode), kill+relaunch teammate |
 
 ### Tracked State

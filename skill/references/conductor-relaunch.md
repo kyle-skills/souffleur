@@ -20,7 +20,7 @@ tier: 3
 <context>
 # Reference: Conductor Relaunch Sequence
 
-Executed when the watcher exits with `CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat`. Six steps recover the Conductor with conversation context preservation.
+Executed when the watcher exits with `CONDUCTOR_DEAD:pid`, `CONDUCTOR_DEAD:heartbeat`, or `CONTEXT_RECOVERY`. Six steps recover the Conductor with conversation context preservation.
 </context>
 </section>
 
@@ -76,12 +76,12 @@ The truncation preserves context continuity — the new Conductor gets the summa
 <core>
 ## Step 4 — Launch New Conductor
 
-See `references/subagent-prompts.md` for the verbatim launch command. The launch:
+Select the launch prompt based on the watcher's exit reason:
 
-1. Opens a new kitty window titled `Conductor (S{N})` where N is the `relaunch_generation`
-2. Invokes Claude Code with `/conductor` plus recovery instructions
-3. Points the new Conductor to the export file and the old session ID
-4. Captures the new PID via `echo $! > temp/souffleur-conductor.pid`
+- If exit reason is `CONTEXT_RECOVERY`: use the **Context Recovery Prompt** from `references/conductor-launch-prompts.md`
+- Otherwise (`CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat`): use the **Crash Recovery Prompt** from `references/conductor-launch-prompts.md`
+
+Launch in a new kitty window titled `Conductor (S{N})` where N is the `relaunch_generation`. Capture the new PID via `echo $! > temp/souffleur-conductor.pid`.
 
 The new Conductor's session ID is unknown at launch time. The watcher discovers it via the `awaiting_session_id` flag.
 
@@ -89,6 +89,10 @@ Update in-session state:
 - `conductor_pid` ← new PID
 - `relaunch_generation` ← increment
 </core>
+
+<reference path="references/conductor-launch-prompts.md" load="required">
+Verbatim launch templates for crash recovery and context recovery. Each includes a mandatory return pointer to Step 5.
+</reference>
 </section>
 
 <section id="step-5-retry-tracking">

@@ -10,14 +10,13 @@ tier: 3
 - overview
 - watcher-prompt
 - teammate-prompt
-- conductor-relaunch-command
 </sections>
 
 <section id="overview">
 <context>
 # Reference: Subagent & Teammate Prompts
 
-Contains the verbatim prompts for all three subagent/teammate types the Souffleur manages. These prompts are carefully crafted and must not be paraphrased or modified.
+Contains the verbatim prompts for the Souffleur's own subagents: the watcher and the teammate self-monitor. These prompts are carefully crafted and must not be paraphrased or modified. Conductor launch prompts are in conductor-launch-prompts.md.
 </context>
 </section>
 
@@ -51,6 +50,7 @@ Awaiting session ID: {true|false}
 - PID is dead → report: "CONDUCTOR_DEAD:pid"
 - Heartbeat >240 seconds stale → report: "CONDUCTOR_DEAD:heartbeat"
 - task-00 state = complete → report: "CONDUCTOR_COMPLETE"
+- task-00 state = context_recovery → report: "CONTEXT_RECOVERY"
 - (Only if awaiting_session_id = true) task-00 session_id changed
   → report: "SESSION_ID_FOUND:{new_session_id}"
 
@@ -96,36 +96,6 @@ background watcher is alive by checking the Souffleur's heartbeat.
 
 <guidance>
 The teammate runs in the foreground so its messages are delivered to the Souffleur main session. It never exits voluntarily — it is only killed by the main session after a new watcher has been confirmed launched. This ensures the ordering invariant: new watcher launches BEFORE old teammate is killed.
-</guidance>
-</section>
-
-<section id="conductor-relaunch-command">
-<core>
-## Conductor Relaunch Command
-
-Substitute `{N}` (relaunch generation), `{EXPORT_PATH}`, and `{OLD_SESSION_ID}` with actual values.
-
-```bash
-kitty --directory /home/kyle/claude/remindly \
-  --title "Conductor (S{N})" -- \
-  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor
-
-Your previous Conductor session crashed or became unresponsive.
-
-**Recovery context:** {EXPORT_PATH}
-
-Read this file first — it contains the conversation transcript from
-your predecessor. The orchestration_tasks and orchestration_messages
-tables in comms-link contain the current state of all tasks. Query
-those to understand where things stand before resuming.
-
-Your predecessor's session ID was: {OLD_SESSION_ID}" &
-echo $! > temp/souffleur-conductor.pid
-```
-</core>
-
-<guidance>
-The new Conductor receives the export file path (never inlined), the old session ID for reference, and instructions to query the database for current task state. The PID is captured for future liveness checks. No PID file cleanup is needed for the Souffleur's own PID — the Conductor does not manage the Souffleur's lifecycle.
 </guidance>
 </section>
 

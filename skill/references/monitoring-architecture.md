@@ -66,7 +66,7 @@ EXIT immediately on detection. Report which trigger fired.
 <mandatory>
 ## Watcher Exit Reasons
 
-The watcher exits for exactly four reasons:
+The watcher exits for exactly five reasons:
 
 | Exit reason | Trigger |
 |---|---|
@@ -74,6 +74,7 @@ The watcher exits for exactly four reasons:
 | `CONDUCTOR_DEAD:heartbeat` | task-00 heartbeat >240 seconds stale |
 | `SESSION_ID_FOUND:{id}` | New session ID on task-00 (only when `awaiting_session_id = true`) |
 | `CONDUCTOR_COMPLETE` | task-00 state = `complete` |
+| `CONTEXT_RECOVERY` | task-00 state = `context_recovery` |
 
 The watcher must NOT exit for any other reason. On detection, EXIT immediately — do not loop, do not send additional messages. Report the current task count in the exit message for retry tracking.
 </mandatory>
