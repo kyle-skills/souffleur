@@ -91,15 +91,14 @@ echo $! > temp/souffleur-conductor.pid
 
 New PID captured: 52847
 
+Update in-session state:
+- `conductor_pid` = 52847
+- `relaunch_generation` = 2
+
 ### Step 2.5 — Retry Tracking
-- `retry_count`: 0 → 1
 - `last_task_count` was 2, watcher reported 14 → new tasks appeared → reset `retry_count` to 0
 - Update `last_task_count` = 14
-
-### Step 2.6 — Update In-Session State
-- `conductor_pid` = 52847
 - `awaiting_session_id` = true
-- `relaunch_generation` = 2
 </core>
 </section>
 

@@ -101,10 +101,9 @@ Verbatim launch templates for crash recovery and context recovery. Each includes
 
 Track consecutive Conductor deaths with no forward progress:
 
-1. Increment `retry_count`
-2. Compare `current_task_count` (from the watcher's last snapshot) against `last_task_count`
-3. If new tasks appeared since last Conductor launch: reset `retry_count` to 0
-4. Update `last_task_count` ← `current_task_count`
+1. Compare `current_task_count` (from the watcher's last snapshot) against `last_task_count`
+2. If new tasks appeared since last Conductor launch: reset `retry_count` to 0, otherwise increment `retry_count`
+3. Update `last_task_count` ← `current_task_count`
 
 **If `retry_count` reaches 3:** Do not relaunch. Print alert and exit:
 

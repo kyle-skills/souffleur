@@ -4,11 +4,11 @@ description: >-
   This skill should be used when the Conductor launches a watchdog session via
   "/souffleur PID:$PID SESSION_ID:$SESSION_ID". Monitors Conductor liveness
   using a three-layer monitoring architecture, relaunches the Conductor on
-  failure with conversation context recovery via claude-export.
-version: 1.0
+  crash or context exhaustion with conversation context recovery via claude-export.
+version: 1.1
 ---
 
-<skill name="souffleur" version="1.0">
+<skill name="souffleur" version="1.1">
 
 <metadata>
 type: skill
@@ -166,11 +166,11 @@ VALIDATING → SETTLING → WATCHING → EXITED
 
 | Event | Exit Reason | Action |
 |---|---|---|
-| Watcher exits | `CONDUCTOR_DEAD:pid` | Relaunch sequence (Section 4) |
-| Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Relaunch sequence (Section 4) |
+| Watcher exits | `CONDUCTOR_DEAD:pid` | Relaunch sequence (see relaunch-protocol) |
+| Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Relaunch sequence (see relaunch-protocol) |
 | Watcher exits | `SESSION_ID_FOUND:{id}` | Update session ID, new watcher (normal mode) |
 | Watcher exits | `CONDUCTOR_COMPLETE` | Clean shutdown |
-| Watcher exits | `CONTEXT_RECOVERY` | Relaunch sequence (Section 4) |
+| Watcher exits | `CONTEXT_RECOVERY` | Relaunch sequence (see relaunch-protocol) |
 | Teammate message | `WATCHER_DEAD` | New watcher (same mode), kill+relaunch teammate |
 
 ### Tracked State

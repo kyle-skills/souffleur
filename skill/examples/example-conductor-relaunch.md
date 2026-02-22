@@ -68,11 +68,14 @@ wc -c < ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 # Output: 523000 (under 800k — use as-is)
 ```
 
-### Step 2.4 — Launch New Conductor
+### Step 2.4 — Launch New Conductor (Crash Recovery Prompt)
+
+The exit reason is `CONDUCTOR_DEAD:heartbeat`, so the relaunch sequence uses the **Crash Recovery Prompt** from conductor-launch-prompts.md.
+
 ```bash
 kitty --directory /home/kyle/claude/remindly \
   --title "Conductor (S2)" -- \
-  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor
+  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor --crash-recovery-protocol
 
 Your previous Conductor session crashed or became unresponsive.
 
@@ -89,15 +92,14 @@ echo $! > temp/souffleur-conductor.pid
 
 New PID captured: 52847
 
+Update in-session state:
+- `conductor_pid` = 52847
+- `relaunch_generation` = 2
+
 ### Step 2.5 — Retry Tracking
-- `retry_count`: 0 → 1
 - `last_task_count` was 2, watcher reported 8 → new tasks appeared → reset `retry_count` to 0
 - Update `last_task_count` = 8
-
-### Step 2.6 — Update In-Session State
-- `conductor_pid` = 52847
 - `awaiting_session_id` = true
-- `relaunch_generation` = 2
 </core>
 </section>
 
@@ -137,11 +139,11 @@ The new watcher will wait ~240 seconds, then begin polling. If the new Conductor
 ## Summary
 
 Conductor relaunch workflow:
-1. Watcher detects stale heartbeat (>240s), exits
+1. Watcher detects stale heartbeat (>240s), exits with `CONDUCTOR_DEAD:heartbeat`
 2. Kill old Conductor (guard with kill -0)
 3. Export conversation log via claude-export
 4. Size check (under 800k, no truncation needed)
-5. Launch new Conductor in kitty with recovery context
+5. Launch new Conductor with **Crash Recovery Prompt** (`--crash-recovery-protocol`)
 6. Retry tracking — new tasks appeared, counter stays at 0
 7. Launch new watcher (awaiting mode)
 8. Kill old teammate, launch new teammate

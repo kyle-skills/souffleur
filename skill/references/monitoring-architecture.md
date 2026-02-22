@@ -141,6 +141,7 @@ Orchestrates the other two layers. Sits idle between events, consuming near-zero
 
 **Routing watcher exits:**
 - `CONDUCTOR_DEAD` → Execute Conductor relaunch sequence (see conductor-relaunch.md)
+- `CONTEXT_RECOVERY` → Execute Conductor relaunch sequence (see conductor-relaunch.md)
 - `SESSION_ID_FOUND:{id}` → Update `conductor_session_id`, launch new watcher (normal mode, `awaiting_session_id=false`)
 - `CONDUCTOR_COMPLETE` → Clean shutdown (kill teammate, set souffleur row to `complete`, exit)
 

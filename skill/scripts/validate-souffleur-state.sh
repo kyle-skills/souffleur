@@ -24,6 +24,9 @@ DB_PATH="${DB_PATH:-$PROJECT_DIR/comms.db}"
 # Valid states for the souffleur row
 VALID_STATES="watching confirmed working error complete exited"
 
+# Valid states for the conductor (task-00) row
+VALID_CONDUCTOR_STATES="pending confirmed working complete error context_recovery exited"
+
 ISSUES=0
 
 # --- Helper: query DB ---
@@ -100,7 +103,23 @@ else
   IFS='|' read -r C_ID C_STATE C_HEARTBEAT <<< "$C_ROW"
   echo "Conductor:  state=$C_STATE"
 
-  # --- Check 5: Conductor heartbeat freshness ---
+  # --- Check 5a: Conductor state validity ---
+  C_STATE_VALID=false
+  for s in $VALID_CONDUCTOR_STATES; do
+    if [[ "$C_STATE" == "$s" ]]; then
+      C_STATE_VALID=true
+      break
+    fi
+  done
+  if [[ "$C_STATE_VALID" == "false" ]]; then
+    echo "Conductor:  WARNING — '$C_STATE' is not a recognized conductor state"
+    ISSUES=$((ISSUES + 1))
+  fi
+  if [[ "$C_STATE" == "context_recovery" ]]; then
+    echo "Conductor:  NOTE — context_recovery state active (relaunch expected)"
+  fi
+
+  # --- Check 5b: Conductor heartbeat freshness ---
   if [[ -n "$C_HEARTBEAT" && "$C_HEARTBEAT" != "null" ]]; then
     C_AGE=$(db_query "SELECT CAST((julianday('now') - julianday('$C_HEARTBEAT')) * 86400 AS INTEGER);")
     C_AGE="${C_AGE:-0}"
