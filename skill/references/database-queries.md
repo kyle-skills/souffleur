@@ -138,6 +138,11 @@ Send `WATCHER_DEAD` message if `age_seconds > 180`.
 UPDATE orchestration_tasks
 SET state = 'complete', last_heartbeat = datetime('now')
 WHERE task_id = 'souffleur';
+
+INSERT INTO orchestration_messages (task_id, from_session, message, message_type)
+VALUES ('souffleur', '$CLAUDE_SESSION_ID',
+    'SOUFFLEUR COMPLETE: Conductor finished orchestration plan. Watchdog shutting down.',
+    'completion');
 ```
 
 ### Retry Exhaustion

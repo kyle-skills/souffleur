@@ -7,6 +7,9 @@
 # Usage: bash validate-souffleur-state.sh [conductor_pid]
 #   conductor_pid — Optional; check PID liveness if provided
 #
+# Note: Uses sqlite3 directly (not comms-link) because this script runs
+# outside Claude Code sessions where MCP tools are unavailable.
+#
 # Exit codes: 0 = healthy, 1 = issues found
 
 set -euo pipefail

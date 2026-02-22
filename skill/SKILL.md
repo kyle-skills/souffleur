@@ -221,6 +221,10 @@ Both watcher and teammate fail their queries. The watcher can't update the heart
 ### Worst-case overlap (WATCHER_DEAD during mid-relaunch)
 The Souffleur checks current state before acting. If a watcher is already running (heartbeat is fresh), the queued WATCHER_DEAD message is stale and no action is needed.
 </context>
+
+<guidance>
+A validation script is available at scripts/validate-souffleur-state.sh for spot-checking database consistency. Run with optional Conductor PID argument.
+</guidance>
 </section>
 
 </skill>
