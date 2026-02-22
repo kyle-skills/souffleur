@@ -49,7 +49,7 @@ The Souffleur main session receives the watcher's exit.
 <core>
 ## Step 2: Conductor Relaunch Sequence
 
-The exit reason is `CONTEXT_RECOVERY`, so the relaunch sequence uses the **Context Recovery Prompt** from conductor-launch-prompts.md.
+The exit reason is `CONTEXT_RECOVERY`, so `{RECOVERY_REASON}` is substituted with the context handoff reason line.
 
 ### Step 2.1 — Kill Old Conductor
 ```bash
@@ -69,11 +69,11 @@ wc -c < ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 # Output: 680000 (under 800k — use as-is)
 ```
 
-### Step 2.4 — Launch New Conductor (Context Recovery Prompt)
+### Step 2.4 — Launch New Conductor
 ```bash
 kitty --directory /home/kyle/claude/remindly \
   --title "Conductor (S2)" -- \
-  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor --context-recovery-protocol
+  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor --recovery-bootstrap
 
 Your predecessor requested a fresh session due to high context usage.
 This is a planned handoff, not a crash.
@@ -129,7 +129,7 @@ New teammate starts with fresh ~360 second initial wait.
 ### Return to Idle
 Transition: WATCHING → WATCHING (same state, new Conductor generation)
 
-The new Conductor receives the `--context-recovery-protocol` flag, reads the export, queries the database, follows its Context Recovery Protocol, then returns to Step 5 (Task Execution) to resume the orchestration plan.
+The new Conductor receives the `--recovery-bootstrap` flag, reads the export, queries the database, follows its Recovery Bootstrap Protocol, then returns to Task Execution to resume the orchestration plan.
 </core>
 </section>
 
@@ -140,13 +140,13 @@ The new Conductor receives the `--context-recovery-protocol` flag, reads the exp
 Context recovery workflow:
 1. Conductor detects high context usage, sets task-00 to `context_recovery`
 2. Watcher detects state change, exits with `CONTEXT_RECOVERY`
-3. Souffleur runs relaunch sequence with **Context Recovery Prompt** (not crash prompt)
+3. Souffleur runs relaunch sequence with Recovery Bootstrap Prompt (context handoff reason)
 4. Kill old Conductor, export transcript, size check, launch new Conductor
 5. Retry tracking — new tasks appeared, counter stays at 0
 6. Launch new watcher (awaiting mode), kill+relaunch teammate
 7. Return to idle
 
-The only difference from a crash relaunch is the launch prompt (step 4). The Conductor receives `--context-recovery-protocol` instead of `--crash-recovery-protocol`, and the opening line says "planned handoff" instead of "crashed or became unresponsive." All other steps are identical.
+The only difference from a crash relaunch is the `{RECOVERY_REASON}` substitution in the launch prompt (step 4). The opening line says "planned handoff" instead of "crashed or became unresponsive." All other steps — including the `--recovery-bootstrap` flag — are identical.
 </context>
 </section>
 

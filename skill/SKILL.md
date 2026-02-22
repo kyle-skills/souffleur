@@ -125,7 +125,7 @@ When the watcher exits with `CONDUCTOR_DEAD` or `CONTEXT_RECOVERY`, execute the 
 1. **Kill old Conductor** — guard with `kill -0` before `kill`
 2. **Export conversation log** — `claude-export $SESSION_ID`
 3. **Size check & truncation** — if export >800k chars, truncate to summary + tail
-4. **Launch new Conductor** — select launch prompt by exit reason (crash vs context recovery)
+4. **Launch new Conductor** — Recovery Bootstrap Prompt with `{RECOVERY_REASON}` substitution
 5. **Retry tracking** — increment counter, reset on progress (new tasks), exit at 3
 6. **Relaunch monitoring** — new watcher (`awaiting_session_id=true`), kill+relaunch teammate
 </core>
@@ -135,7 +135,7 @@ Full 6-step procedure with bash commands, retry logic, and monitoring layer rela
 </reference>
 
 <reference path="references/conductor-launch-prompts.md" load="required">
-Verbatim launch templates for crash recovery and context recovery Conductor sessions.
+Recovery Bootstrap Prompt template with {RECOVERY_REASON} substitution table.
 </reference>
 
 <guidance>

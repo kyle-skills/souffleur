@@ -68,14 +68,14 @@ wc -c < ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 # Output: 523000 (under 800k — use as-is)
 ```
 
-### Step 2.4 — Launch New Conductor (Crash Recovery Prompt)
+### Step 2.4 — Launch New Conductor
 
-The exit reason is `CONDUCTOR_DEAD:heartbeat`, so the relaunch sequence uses the **Crash Recovery Prompt** from conductor-launch-prompts.md.
+The exit reason is `CONDUCTOR_DEAD:heartbeat`, so `{RECOVERY_REASON}` is substituted with the crash reason line.
 
 ```bash
 kitty --directory /home/kyle/claude/remindly \
   --title "Conductor (S2)" -- \
-  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor --crash-recovery-protocol
+  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor --recovery-bootstrap
 
 Your previous Conductor session crashed or became unresponsive.
 
@@ -143,7 +143,7 @@ Conductor relaunch workflow:
 2. Kill old Conductor (guard with kill -0)
 3. Export conversation log via claude-export
 4. Size check (under 800k, no truncation needed)
-5. Launch new Conductor with **Crash Recovery Prompt** (`--crash-recovery-protocol`)
+5. Launch new Conductor with Recovery Bootstrap Prompt (`--recovery-bootstrap`, crash reason)
 6. Retry tracking — new tasks appeared, counter stays at 0
 7. Launch new watcher (awaiting mode)
 8. Kill old teammate, launch new teammate

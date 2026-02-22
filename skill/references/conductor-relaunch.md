@@ -76,10 +76,10 @@ The truncation preserves context continuity — the new Conductor gets the summa
 <core>
 ## Step 4 — Launch New Conductor
 
-Select the launch prompt based on the watcher's exit reason:
+Use the **Recovery Bootstrap Prompt** from `references/conductor-launch-prompts.md`. Substitute `{RECOVERY_REASON}` based on the watcher's exit reason:
 
-- If exit reason is `CONTEXT_RECOVERY`: use the **Context Recovery Prompt** from `references/conductor-launch-prompts.md`
-- Otherwise (`CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat`): use the **Crash Recovery Prompt** from `references/conductor-launch-prompts.md`
+- If `CONTEXT_RECOVERY`: use the context handoff reason line
+- If `CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat`: use the crash reason line
 
 Launch in a new kitty window titled `Conductor (S{N})` where N is the `relaunch_generation`. Capture the new PID via `echo $! > temp/souffleur-conductor.pid`.
 
@@ -91,7 +91,7 @@ Update in-session state:
 </core>
 
 <reference path="references/conductor-launch-prompts.md" load="required">
-Verbatim launch templates for crash recovery and context recovery. Each includes a mandatory return pointer to Step 5.
+Recovery Bootstrap Prompt template with {RECOVERY_REASON} substitution table. Includes a mandatory return pointer to Step 5.
 </reference>
 </section>
 
