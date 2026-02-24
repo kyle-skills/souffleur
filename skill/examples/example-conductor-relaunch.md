@@ -58,7 +58,7 @@ kill -0 45231 && kill 45231
 
 ### Step 2.2 — Export Conversation Log
 ```bash
-claude-export abc12345-def6-7890-ghij-klmnopqrstuv
+claude_export abc12345-def6-7890-ghij-klmnopqrstuv
 # Output: ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 ```
 
@@ -141,7 +141,7 @@ The new watcher will wait ~240 seconds, then begin polling. If the new Conductor
 Conductor relaunch workflow:
 1. Watcher detects stale heartbeat (>240s), exits with `CONDUCTOR_DEAD:heartbeat`
 2. Kill old Conductor (guard with kill -0)
-3. Export conversation log via claude-export
+3. Export conversation log via claude_export
 4. Size check (under 800k, no truncation needed)
 5. Launch new Conductor with Recovery Bootstrap Prompt (`--recovery-bootstrap`, crash reason)
 6. Retry tracking — new tasks appeared, counter stays at 0

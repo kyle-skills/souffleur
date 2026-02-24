@@ -59,7 +59,7 @@ kill -0 45231 && kill 45231
 
 ### Step 2.2 — Export Conversation Log
 ```bash
-claude-export abc12345-def6-7890-ghij-klmnopqrstuv
+claude_export abc12345-def6-7890-ghij-klmnopqrstuv
 # Output: ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 ```
 

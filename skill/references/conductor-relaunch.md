@@ -45,7 +45,7 @@ If the PID is already dead (the common case for `CONDUCTOR_DEAD:pid`), `kill -0`
 Export the dead Conductor's conversation transcript:
 
 ```bash
-claude-export $SESSION_ID
+claude_export $SESSION_ID
 ```
 
 Output path: `~/Documents/claude_exports/${SESSION_ID}_clean.md`

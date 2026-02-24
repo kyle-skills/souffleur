@@ -4,7 +4,7 @@ description: >-
   This skill should be used when the Conductor launches a watchdog session via
   "/souffleur PID:$PID SESSION_ID:$SESSION_ID". Monitors Conductor liveness
   using a three-layer monitoring architecture, relaunches the Conductor on
-  crash or context exhaustion with conversation context recovery via claude-export.
+  crash or context exhaustion with conversation context recovery via claude_export.
 version: 1.1
 ---
 
@@ -123,7 +123,7 @@ See examples/example-initial-launch.md for a complete bootstrap-to-WATCHING walk
 When the watcher exits with `CONDUCTOR_DEAD` or `CONTEXT_RECOVERY`, execute the six-step relaunch sequence:
 
 1. **Kill old Conductor** — guard with `kill -0` before `kill`
-2. **Export conversation log** — `claude-export $SESSION_ID`
+2. **Export conversation log** — `claude_export $SESSION_ID`
 3. **Size check & truncation** — if export >800k chars, truncate to summary + tail
 4. **Launch new Conductor** — Recovery Bootstrap Prompt with `{RECOVERY_REASON}` substitution
 5. **Retry tracking** — increment counter, reset on progress (new tasks), exit at 3
