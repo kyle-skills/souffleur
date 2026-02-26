@@ -1,4 +1,4 @@
-<skill name="souffleur-conductor-launch-prompts" version="1.1">
+<skill name="souffleur-conductor-launch-prompts" version="1.2">
 
 <metadata>
 type: reference
@@ -8,36 +8,51 @@ tier: 3
 
 <sections>
 - overview
-- recovery-bootstrap-prompt
+- default-resume-prompt
+- claude-export-launch-template
 </sections>
 
 <section id="overview">
 <context>
-# Reference: Conductor Launch Prompt
+# Reference: Conductor Launch Prompts
 
-Contains the verbatim launch prompt template for spawning a new Conductor session after a crash or context recovery. The Souffleur substitutes `{RECOVERY_REASON}` with the appropriate reason line before launching.
-
-This prompt is used by Step 4 of the Conductor Relaunch Sequence (see conductor-relaunch.md).
+Contains the prompt defaults and launch template fields used when the Souffleur relaunches a Conductor generation. The claude_export provider uses this template directly. The Lethe provider may pass a prompt through to Lethe for resumed-session launch handling.
 </context>
 </section>
 
-<section id="recovery-bootstrap-prompt">
+<section id="default-resume-prompt">
+<mandatory>
+## Default Resume Prompt
+
+If no `resume_prompt` is provided in `CONTEXT_RECOVERY_PAYLOAD_V1`, use this exact default:
+
+```text
+/conductor --recovery-bootstrap
+
+The session history was cleaned, review handoff documents and resume plan implementation.
+```
+
+The first line must be `/conductor --recovery-bootstrap` so the resumed Conductor enters Recovery Bootstrap Protocol immediately.
+</mandatory>
+</section>
+
+<section id="claude-export-launch-template">
 <core>
-## Recovery Bootstrap Prompt
+## claude_export Launch Template
 
-Used for all Conductor relaunches. Substitute `{N}` (relaunch generation), `{EXPORT_PATH}`, `{OLD_SESSION_ID}`, and `{RECOVERY_REASON}` with actual values.
+Used by `claude-export-recovery-provider.md`. Substitute placeholders:
 
-**`{RECOVERY_REASON}` substitution:**
-
-| Exit reason | Substitution |
-|---|---|
-| `CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat` | `Your previous Conductor session crashed or became unresponsive.` |
-| `CONTEXT_RECOVERY` | `Your predecessor requested a fresh session due to high context usage. This is a planned handoff, not a crash.` |
+- `{N}` — relaunch generation number
+- `{PERMISSION_MODE}` — `permission_mode` from payload or default `acceptEdits`
+- `{RESUME_PROMPT}` — payload prompt or default prompt
+- `{RECOVERY_REASON}` — crash/context-recovery reason line
+- `{EXPORT_PATH}` — claude_export output path
+- `{OLD_SESSION_ID}` — predecessor Conductor session ID
 
 ```bash
 kitty --directory /home/kyle/claude/remindly \
   --title "Conductor (S{N})" -- \
-  env -u CLAUDECODE claude --permission-mode acceptEdits "/conductor --recovery-bootstrap
+  env -u CLAUDECODE claude --permission-mode {PERMISSION_MODE} "{RESUME_PROMPT}
 
 {RECOVERY_REASON}
 
@@ -53,8 +68,14 @@ echo $! > temp/souffleur-conductor.pid
 ```
 </core>
 
+<guidance>
+`{RECOVERY_REASON}` substitution table:
+- `CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat` -> `Your previous Conductor session crashed or became unresponsive.`
+- `CONTEXT_RECOVERY` -> `Your predecessor requested a fresh session due to high context usage. This is a planned handoff, not a crash.`
+</guidance>
+
 <mandatory>
-After launching the Conductor, return to Step 5 (Retry Tracking) in conductor-relaunch.md.
+After launch, provider control returns to `recovery-wrap-up.md` for retry tracking and monitoring-layer relaunch.
 </mandatory>
 </section>
 

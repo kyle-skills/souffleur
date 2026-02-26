@@ -1,4 +1,4 @@
-<skill name="souffleur-database-queries" version="1.0">
+<skill name="souffleur-database-queries" version="1.2">
 
 <metadata>
 type: reference
@@ -9,6 +9,7 @@ tier: 3
 <sections>
 - overview
 - bootstrap-queries
+- recovery-router-queries
 - watcher-queries
 - teammate-queries
 - terminal-queries
@@ -75,6 +76,39 @@ VALUES ('souffleur', '$CLAUDE_SESSION_ID',
 </core>
 </section>
 
+<section id="recovery-router-queries">
+<core>
+## Recovery Router Queries
+
+### Read Latest Recovery Payload
+
+Read most recent context-recovery payload for Souffleur:
+
+```sql
+SELECT message FROM orchestration_messages
+WHERE task_id = 'souffleur'
+  AND message_type = 'instruction'
+  AND message LIKE 'CONTEXT_RECOVERY_PAYLOAD_V1%'
+ORDER BY timestamp DESC LIMIT 1;
+```
+
+If no row is returned, use provider defaults.
+
+### Emit Degraded Monitoring Warning
+
+When Lethe relaunch succeeds but PID remains unresolved after one discovery attempt:
+
+```sql
+INSERT INTO orchestration_messages (task_id, from_session, message, message_type)
+VALUES ('souffleur', '$CLAUDE_SESSION_ID',
+    'SOUFFLEUR WARNING: Lethe recovery succeeded but Conductor PID could not be resolved.
+     Switched watcher to heartbeat-only mode for this generation.
+     PID liveness checks are temporarily disabled.',
+    'warning');
+```
+</core>
+</section>
+
 <section id="watcher-queries">
 <core>
 ## Watcher Queries
@@ -103,7 +137,7 @@ SELECT COUNT(*) FROM orchestration_tasks;
 SELECT session_id FROM orchestration_tasks WHERE task_id = 'task-00';
 ```
 
-### Check Conductor Completion
+### Check Conductor Completion / Recovery Trigger
 ```sql
 SELECT state FROM orchestration_tasks WHERE task_id = 'task-00';
 ```
@@ -111,7 +145,7 @@ Exit if `state = 'complete'` or `state = 'context_recovery'`.
 </core>
 
 <guidance>
-PID liveness is checked via bash (`kill -0 $PID`), not SQL. The watcher combines all checks in a single poll cycle, updating the Souffleur heartbeat first (step 1) so the teammate sees freshness even if later checks take time.
+Normal watcher mode checks PID and heartbeat. Heartbeat-only mode skips PID checks and relies on task-00 heartbeat/state signals.
 </guidance>
 </section>
 
@@ -162,9 +196,10 @@ Every INSERT into `orchestration_messages` must include `message_type`. The Souf
 
 | Type | Direction | Usage |
 |---|---|---|
-| `error` | Souffleur → Conductor | Validation failures, terminal messages |
-| `instruction` | Conductor → Souffleur | Corrected args (read-only by Souffleur) |
-| `completion` | Souffleur → Conductor | Clean shutdown notification |
+| `error` | Souffleur -> Conductor | Validation failures, terminal messages |
+| `instruction` | Conductor -> Souffleur | Corrected args and context-recovery payload |
+| `completion` | Souffleur -> Conductor | Clean shutdown notification |
+| `warning` | Souffleur -> Conductor | Degraded monitoring mode notice |
 
 Never insert a message with NULL `message_type`.
 </mandatory>

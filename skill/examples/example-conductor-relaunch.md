@@ -21,6 +21,8 @@ tier: 3
 ## Scenario
 
 The Conductor (PID 45231) has been running for 2 hours. The Souffleur's watcher detects that the Conductor's heartbeat is >240 seconds stale — the Conductor's internal watcher has likely crashed, and the main session is frozen or looping. The watcher exits to notify the Souffleur.
+
+Because this is a crash signal (`CONDUCTOR_DEAD:heartbeat`), the recovery router selects the `claude_export` provider directly.
 </context>
 </section>
 
@@ -140,14 +142,15 @@ The new watcher will wait ~240 seconds, then begin polling. If the new Conductor
 
 Conductor relaunch workflow:
 1. Watcher detects stale heartbeat (>240s), exits with `CONDUCTOR_DEAD:heartbeat`
-2. Kill old Conductor (guard with kill -0)
-3. Export conversation log via claude_export
-4. Size check (under 800k, no truncation needed)
-5. Launch new Conductor with Recovery Bootstrap Prompt (`--recovery-bootstrap`, crash reason)
-6. Retry tracking — new tasks appeared, counter stays at 0
-7. Launch new watcher (awaiting mode)
-8. Kill old teammate, launch new teammate
-9. Return to idle
+2. Recovery router selects `claude_export` provider
+3. Kill old Conductor (guard with kill -0)
+4. Export conversation log via claude_export
+5. Size check (under 800k, no truncation needed)
+6. Launch new Conductor with Recovery Bootstrap Prompt (`--recovery-bootstrap`, crash reason)
+7. Retry tracking — new tasks appeared, counter stays at 0
+8. Launch new watcher (awaiting mode)
+9. Kill old teammate, launch new teammate
+10. Return to idle
 
 Total main session context consumed: minimal — parsed one exit message, ran a few bash commands, launched two agents. The heavy lifting (conversation export, new Conductor bootstrap) happens outside the Souffleur's context.
 </context>

@@ -3,12 +3,13 @@ name: souffleur
 description: >-
   This skill should be used when the Conductor launches a watchdog session via
   "/souffleur PID:$PID SESSION_ID:$SESSION_ID". Monitors Conductor liveness
-  using a three-layer monitoring architecture, relaunches the Conductor on
-  crash or context exhaustion with conversation context recovery via claude_export.
-version: 1.1
+  using a three-layer monitoring architecture and recovers Conductor sessions
+  via a provider router: prefer Lethe compaction when available, otherwise use
+  claude_export relaunch.
+version: 1.2
 ---
 
-<skill name="souffleur" version="1.1">
+<skill name="souffleur" version="1.2">
 
 <metadata>
 type: skill
@@ -20,7 +21,8 @@ tier: 3
 - identity
 - bootstrap-protocol
 - monitoring-architecture
-- relaunch-protocol
+- recovery-router
+- recovery-providers
 - event-loop
 - exit-conditions
 - error-edge-cases
@@ -38,11 +40,15 @@ tier: 3
 - A watcher must always be running while the Souffleur is in WATCHING state
 - The main session must stay near-zero context — delegate all polling to subagents
 - Guard PID kills with `kill -0` before `kill` — never kill blindly
-- The `awaiting_session_id` flag is `true` for exactly one watcher generation after each Conductor relaunch — never on initial launch or same-Conductor watcher relaunches
+- The `awaiting_session_id` flag is `true` for exactly one watcher generation after each Conductor relaunch that needs session ID rediscovery
 - New watcher launches BEFORE old teammate is killed — ordering invariant is non-negotiable
 - All subagents and teammates must use `model="opus"` — sonnet is insufficient for orchestration
-- The Souffleur does not perform implementation work — it only watches, relaunches, and exits
-- The export file path is always passed to the new Conductor in the prompt — never inline the content
+- Recovery providers are mutually exclusive per recovery event cycle
+- Lethe launch failure before relaunch starts gets one retry, then fallback to claude_export provider
+- No double-relaunch: once Lethe has started a new Conductor generation, do not execute claude_export for that cycle
+- If Lethe succeeds but no PID is available after one discovery attempt, switch to heartbeat-only watcher mode and emit a warning message
+- Default recovery prompt (when not provided) must begin with `/conductor --recovery-bootstrap`
+- The Souffleur does not perform implementation work — it only watches, recovers, and exits
 </mandatory>
 </section>
 
@@ -58,9 +64,9 @@ Launched by the Conductor at the start of an orchestration plan. Runs in its own
 </core>
 
 <context>
-The Conductor has internal monitoring (a background watcher refreshing task-00's heartbeat), and Musicians detect Conductor death via a 540-second staleness threshold. But nothing external relaunches the Conductor when it dies. The Souffleur fills this gap.
+The Conductor has internal monitoring (a background watcher refreshing task-00's heartbeat), and Musicians detect Conductor death via a 540-second staleness threshold. But nothing external recovers the Conductor when it dies or requests context recovery. The Souffleur fills this gap.
 
-The Souffleur's main session stays near-zero context by delegating all polling to a background subagent (watcher) and monitoring the watcher via a teammate (self-monitor). This three-layer architecture ensures no blind windows while keeping the main session available to respond to events for the full duration of orchestration.
+The Souffleur's main session stays near-zero context by delegating all polling to a background subagent (watcher) and monitoring the watcher via a teammate (self-monitor). Recovery behavior is routed through provider references so compaction and relaunch mechanics can evolve without destabilizing monitoring logic.
 </context>
 </section>
 
@@ -92,9 +98,9 @@ Three layers ensure continuous monitoring with no blind windows:
 
 | Layer | Type | Role | Cadence |
 |---|---|---|---|
-| **Watcher** | Background subagent | Polls Conductor liveness, updates Souffleur heartbeat | ~60s (after ~240s initial wait) |
+| **Watcher** | Background subagent | Polls Conductor liveness and/or heartbeat, updates Souffleur heartbeat | ~60s (after ~240s initial wait) |
 | **Teammate** | Foreground teammate | Monitors watcher via Souffleur heartbeat staleness | ~180s (after ~360s initial wait) |
-| **Main session** | This session | Routes events, orchestrates relaunches | Event-driven (idle between events) |
+| **Main session** | This session | Routes events, orchestrates recoveries | Event-driven (idle between events) |
 
 The watcher's heartbeat update is both its primary side effect and the teammate's detection mechanism. If the watcher dies, the heartbeat goes stale, and the teammate detects it within one cycle (~180 seconds).
 </core>
@@ -104,11 +110,11 @@ Ordering invariant: new watcher launches BEFORE old teammate is killed. At least
 </mandatory>
 
 <reference path="references/monitoring-architecture.md" load="required">
-Layer details: timing constants, poll cycles, exit reasons, awaiting_session_id flag semantics.
+Layer details: timing constants, normal vs heartbeat-only watcher modes, poll cycles, exit reasons, awaiting_session_id semantics.
 </reference>
 
 <reference path="references/subagent-prompts.md" load="required">
-Verbatim prompts for watcher subagent and teammate self-monitor.
+Verbatim prompts for normal watcher, heartbeat-only watcher, and teammate self-monitor.
 </reference>
 
 <guidance>
@@ -116,30 +122,81 @@ See examples/example-initial-launch.md for a complete bootstrap-to-WATCHING walk
 </guidance>
 </section>
 
-<section id="relaunch-protocol">
+<section id="recovery-router">
 <core>
-## Conductor Relaunch Protocol
+## Recovery Router
 
-When the watcher exits with `CONDUCTOR_DEAD` or `CONTEXT_RECOVERY`, execute the six-step relaunch sequence:
+When the watcher exits with `CONTEXT_RECOVERY`, route recovery through provider selection.
 
-1. **Kill old Conductor** — guard with `kill -0` before `kill`
-2. **Export conversation log** — `claude_export $SESSION_ID`
-3. **Size check & truncation** — if export >800k chars, truncate to summary + tail
-4. **Launch new Conductor** — Recovery Bootstrap Prompt with `{RECOVERY_REASON}` substitution
-5. **Retry tracking** — increment counter, reset on progress (new tasks), exit at 3
-6. **Relaunch monitoring** — new watcher (`awaiting_session_id=true`), kill+relaunch teammate
+### Router Inputs
+
+- Internal state: `conductor_pid`, `conductor_session_id`, `relaunch_generation`, retry/task counters
+- Optional payload from latest Souffleur instruction message:
+  - `permission_mode`
+  - `resume_prompt`
+
+Payload format is tagged plaintext:
+
+```text
+CONTEXT_RECOVERY_PAYLOAD_V1
+permission_mode: <value>
+resume_prompt: <value>
+```
+
+### Router Sequence
+
+1. Resolve payload/defaults (see database-queries and provider references).
+2. Run Lethe preflight (strict soft dependency check).
+3. If preflight passes: run Lethe provider.
+4. If preflight fails: run claude_export provider.
+5. Execute shared wrap-up sequence.
+
+Lethe preflight is selection-time only. It does not commit to relaunch.
 </core>
 
-<reference path="references/conductor-relaunch.md" load="required">
-Full 6-step procedure with bash commands, retry logic, and monitoring layer relaunch.
+<reference path="references/database-queries.md" load="required">
+Payload read queries and warning message templates.
+</reference>
+
+<reference path="references/lethe-recovery-provider.md" load="required">
+Lethe provider procedure: preflight, launch attempts, completion contract, PID resolution, degraded mode.
+</reference>
+
+<reference path="references/claude-export-recovery-provider.md" load="required">
+claude_export provider procedure: kill/export/size check/relaunch and default prompt+permission handling.
+</reference>
+</section>
+
+<section id="recovery-providers">
+<core>
+## Recovery Providers
+
+### Provider Summary
+
+- **Lethe provider (preferred):** compacts and relaunches through a teammate workflow.
+- **claude_export provider (fallback):** uses export transcript and relaunch prompt workflow.
+
+### Shared Return Contract
+
+Both providers return enough data for shared monitoring re-entry:
+- `status`: success or failure
+- `provider_used`: lethe or claude_export
+- `new_conductor_pid`: PID when known, null when unresolved
+- `session_id_mode`: `reused` or `rediscover`
+
+Lethe provider can return `new_conductor_pid = null` when unavailable. In that case the router runs one PID discovery attempt. If still unresolved, the Souffleur transitions to heartbeat-only watcher mode and logs a warning.
+</core>
+
+<reference path="references/recovery-wrap-up.md" load="required">
+Shared post-provider sequence: retry/task progress logic, watcher/teammate relaunch, WATCHING re-entry.
 </reference>
 
 <reference path="references/conductor-launch-prompts.md" load="required">
-Recovery Bootstrap Prompt template with {RECOVERY_REASON} substitution table.
+Default recovery prompt text and claude_export launch template fields.
 </reference>
 
 <guidance>
-See examples/example-conductor-relaunch.md for a complete death-detection-to-relaunch walkthrough.
+See examples/example-context-recovery.md for Lethe-primary flow and recovery-wrap-up integration.
 </guidance>
 </section>
 
@@ -152,25 +209,25 @@ See examples/example-conductor-relaunch.md for a complete death-detection-to-rel
 ```
 VALIDATING → SETTLING → WATCHING → EXITED
                            ↑↓
-                      (relaunch cycles)
+                      (recovery cycles)
 ```
 
 | State | Description | Transitions to |
 |---|---|---|
 | **VALIDATING** | Parsing and validating args | SETTLING (success) or VALIDATING (retry) or EXITED (3 failures) |
 | **SETTLING** | Launching watcher + teammate, initial wait | WATCHING |
-| **WATCHING** | Idle, waiting for events | WATCHING (relaunch cycle) or EXITED (exhaustion/completion) |
+| **WATCHING** | Idle, waiting for events | WATCHING (recovery cycle) or EXITED (exhaustion/completion) |
 | **EXITED** | Terminal | — |
 
 ### Event Routing (WATCHING State)
 
 | Event | Exit Reason | Action |
 |---|---|---|
-| Watcher exits | `CONDUCTOR_DEAD:pid` | Relaunch sequence (see relaunch-protocol) |
-| Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Relaunch sequence (see relaunch-protocol) |
+| Watcher exits | `CONDUCTOR_DEAD:pid` | Recovery via claude_export provider |
+| Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Recovery via claude_export provider |
 | Watcher exits | `SESSION_ID_FOUND:{id}` | Update session ID, new watcher (normal mode) |
 | Watcher exits | `CONDUCTOR_COMPLETE` | Clean shutdown |
-| Watcher exits | `CONTEXT_RECOVERY` | Relaunch sequence (see relaunch-protocol) |
+| Watcher exits | `CONTEXT_RECOVERY` | Recovery router (Lethe preferred, fallback to claude_export pre-relaunch only) |
 | Teammate message | `WATCHER_DEAD` | New watcher (same mode), kill+relaunch teammate |
 
 ### Tracked State
@@ -179,12 +236,14 @@ Minimal state held in-session between cycles:
 
 | Variable | Purpose | Updated when |
 |---|---|---|
-| `conductor_pid` | Current Conductor PID | On relaunch |
-| `conductor_session_id` | Current Conductor session ID | On discovery (SESSION_ID_FOUND) |
-| `retry_count` | Consecutive deaths with no progress | On relaunch (reset on new tasks) |
-| `last_task_count` | Task count at last Conductor launch | On relaunch |
-| `awaiting_session_id` | True after relaunch until discovered | On relaunch (set true), on discovery (set false) |
-| `relaunch_generation` | Counter for kitty window titles (S2, S3...) | On relaunch |
+| `conductor_pid` | Current Conductor PID (or null in degraded mode) | On provider completion and PID discovery |
+| `conductor_session_id` | Current Conductor session ID | On discovery or provider completion |
+| `retry_count` | Consecutive deaths with no progress | On recovery (reset on new tasks) |
+| `last_task_count` | Task count at last Conductor launch | On recovery |
+| `awaiting_session_id` | True when session ID rediscovery is required | Provider-dependent in wrap-up |
+| `relaunch_generation` | Counter for kitty window titles (S2, S3...) | On successful relaunch |
+| `watcher_mode` | `normal` or `heartbeat-only` | On PID resolution outcome |
+| `active_recovery_provider` | Current provider in cycle (`lethe`/`claude_export`) | On recovery router selection |
 </core>
 </section>
 
@@ -198,7 +257,7 @@ The Souffleur exits in exactly three scenarios:
 Set row to `exited`, insert terminal message, exit session.
 
 ### 2. Retry Exhaustion (3 consecutive Conductor deaths with no progress)
-Set row to `error`, print alert with last export path, exit session.
+Set row to `error`, print alert with last recovery artifact path, exit session.
 
 ### 3. Conductor Completes the Plan
 Watcher exits with `CONDUCTOR_COMPLETE`. Kill teammate. Set row to `complete`. Exit cleanly.
@@ -214,17 +273,20 @@ No other scenario causes the Souffleur to exit. Watcher deaths and teammate mess
 ### Conductor dies during bootstrap
 Arg validation includes `kill -0 $PID` — if the Conductor is already dead, the PID check fails and enters the retry loop. If it dies after validation but before the watcher launches, the watcher's initial wait (~240s) covers this — by first check, the heartbeat is already stale.
 
-### Souffleur's own context exhaustion
-Unlikely given the near-zero context design. If it happens, the watcher and teammate keep running independently. The teammate nags about a stale heartbeat. Without a Souffleur to relaunch, the system degrades to Musicians' 540-second staleness detection as the final safety net.
+### Malformed or missing context-recovery payload
+If no valid `CONTEXT_RECOVERY_PAYLOAD_V1` message is found, defaults apply and recovery proceeds. Payload parsing errors are non-fatal.
+
+### Lethe relaunch succeeded but PID unavailable
+The Souffleur attempts one PID discovery scan. If it still cannot resolve a PID, it switches to heartbeat-only watcher mode and emits a warning message. It does not execute a second recovery provider for the same cycle.
 
 ### Multiple watcher exits queued
-Events are handled sequentially. The relaunch sequence is idempotent — killing an already-dead PID is a no-op, exporting the same session twice produces the same file, launching a new Conductor is always safe.
+Events are handled sequentially. Recovery steps are idempotent where possible. Stale queued `WATCHER_DEAD` messages are ignored when watcher heartbeat is already fresh.
 
 ### comms-link unavailable
-Both watcher and teammate fail their queries. The watcher can't update the heartbeat, so the teammate flags it. The Souffleur relaunches the watcher, which also fails. This loops until the database recovers — bounded by cheap cycles and transient WAL locks.
+Both watcher and teammate fail their queries. The watcher cannot update heartbeat, so teammate flags it. The Souffleur relaunches watcher/teammate layers until database access recovers.
 
-### Worst-case overlap (WATCHER_DEAD during mid-relaunch)
-The Souffleur checks current state before acting. If a watcher is already running (heartbeat is fresh), the queued WATCHER_DEAD message is stale and no action is needed.
+### Souffleur context exhaustion
+Unlikely due to near-zero context design. If it occurs, watcher/teammate can continue temporarily. Musicians' 540-second staleness detection remains the final safety net.
 </context>
 
 <guidance>

@@ -1,12 +1,15 @@
 # Souffleur
 
-Monitors Conductor liveness and relaunches it on failure with conversation context recovery. The Souffleur is the external watchdog in the orchestra-themed orchestration system: **Conductor** (coordination) > Musician (implementation) > Subagents (focused work), with the **Souffleur** watching from the wings.
+Monitors Conductor liveness and recovers it on failure with provider-routed context recovery. The Souffleur is the external watchdog in the orchestra-themed orchestration system: **Conductor** (coordination) > Musician (implementation) > Subagents (focused work), with the **Souffleur** watching from the wings.
 
 ## What It Does
 
 - Validates Conductor PID and session ID at launch
 - Monitors Conductor via three-layer architecture (watcher, self-monitor, main session)
-- Relaunches Conductor on death with exported conversation context
+- Routes recovery through providers:
+  - prefers Lethe compaction + relaunch when available
+  - falls back to `claude_export` recovery when Lethe is unavailable or pre-relaunch launch fails
+- Supports degraded heartbeat-only monitoring mode when Lethe relaunch succeeds but PID cannot be resolved
 - Tracks consecutive failures and alerts on retry exhaustion
 
 ## Structure
@@ -14,8 +17,8 @@ Monitors Conductor liveness and relaunches it on failure with conversation conte
 ```
 souffleur/
   skill/SKILL.md           # Skill definition (entry point)
-  skill/examples/           # Launch, relaunch, discovery, completion workflows
-  skill/references/         # Bootstrap, monitoring, relaunch, prompts, SQL
+  skill/examples/           # Launch, provider routing, discovery, completion workflows
+  skill/references/         # Bootstrap, monitoring, providers, wrap-up, prompts, SQL
   skill/scripts/            # State validation
   docs/archive/             # Historical documents
 ```
