@@ -143,15 +143,22 @@ permission_mode: <value>
 resume_prompt: <value>
 ```
 
+Parsing rules:
+- Must start with `CONTEXT_RECOVERY_PAYLOAD_V1` header line.
+- `permission_mode` and `resume_prompt` are optional fields.
+- Unknown fields are ignored.
+- Missing fields resolve through provider defaults (see conductor-launch-prompts.md).
+- Malformed or absent payload is non-fatal — recovery proceeds with defaults.
+
 ### Router Sequence
 
 1. Resolve payload/defaults (see database-queries and provider references).
 2. Run Lethe preflight (strict soft dependency check).
-3. If preflight passes: run Lethe provider.
-4. If preflight fails: run claude_export provider.
-5. Execute shared wrap-up sequence.
+3. If preflight passes: set `active_recovery_provider = lethe`, run Lethe provider.
+4. If preflight fails: set `active_recovery_provider = claude_export`, run claude_export provider.
+5. Execute shared wrap-up sequence (clears `active_recovery_provider` on completion).
 
-Lethe preflight is selection-time only. It does not commit to relaunch.
+Lethe preflight is selection-time only. It does not commit to relaunch. `active_recovery_provider` enforces the no-double-relaunch rule: if Lethe starts a relaunch generation, the guard value prevents claude_export from executing in the same cycle even if Lethe reports a partial failure.
 </core>
 
 <reference path="references/database-queries.md" load="required">
@@ -175,6 +182,15 @@ claude_export provider procedure: kill/export/size check/relaunch and default pr
 
 - **Lethe provider (preferred):** compacts and relaunches through a teammate workflow.
 - **claude_export provider (fallback):** uses export transcript and relaunch prompt workflow.
+
+### Common Provider Inputs
+
+Both providers receive from the recovery router:
+- `conductor_pid`, `conductor_session_id`, `relaunch_generation`
+- `retry_count`, `last_task_count`, `current_task_count`
+- Optional payload fields: `permission_mode`, `resume_prompt` (resolved from `CONTEXT_RECOVERY_PAYLOAD_V1` or defaults)
+
+Retry and task counters are passed through to wrap-up for progress tracking. Providers themselves use PID, session ID, generation, and payload fields for their core operations.
 
 ### Shared Return Contract
 
@@ -243,7 +259,7 @@ Minimal state held in-session between cycles:
 | `awaiting_session_id` | True when session ID rediscovery is required | Provider-dependent in wrap-up |
 | `relaunch_generation` | Counter for kitty window titles (S2, S3...) | On successful relaunch |
 | `watcher_mode` | `normal` or `heartbeat-only` | On PID resolution outcome |
-| `active_recovery_provider` | Current provider in cycle (`lethe`/`claude_export`) | On recovery router selection |
+| `active_recovery_provider` | Double-relaunch guard: current provider or null (`lethe`/`claude_export`/null) | Set on provider entry, cleared on wrap-up completion |
 </core>
 </section>
 

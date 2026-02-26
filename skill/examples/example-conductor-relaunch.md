@@ -1,4 +1,4 @@
-<skill name="souffleur-example-conductor-relaunch" version="1.0">
+<skill name="souffleur-example-conductor-relaunch" version="1.2">
 
 <metadata>
 type: example
@@ -22,7 +22,7 @@ tier: 3
 
 The Conductor (PID 45231) has been running for 2 hours. The Souffleur's watcher detects that the Conductor's heartbeat is >240 seconds stale — the Conductor's internal watcher has likely crashed, and the main session is frozen or looping. The watcher exits to notify the Souffleur.
 
-Because this is a crash signal (`CONDUCTOR_DEAD:heartbeat`), the recovery router selects the `claude_export` provider directly.
+Because this is a crash signal (`CONDUCTOR_DEAD:heartbeat`), the main session routes directly to the `claude_export` provider — crash events bypass the recovery router's Lethe preflight.
 </context>
 </section>
 
@@ -50,7 +50,9 @@ The Souffleur main session receives the watcher's exit.
 
 <section id="relaunch-sequence">
 <core>
-## Step 2: Conductor Relaunch Sequence
+## Step 2: claude_export Provider Executes
+
+The `claude_export` provider runs its four-step sequence (see `references/claude-export-recovery-provider.md`).
 
 ### Step 2.1 — Kill Old Conductor
 ```bash
@@ -98,16 +100,21 @@ Update in-session state:
 - `conductor_pid` = 52847
 - `relaunch_generation` = 2
 
-### Step 2.5 — Retry Tracking
-- `last_task_count` was 2, watcher reported 8 → new tasks appeared → reset `retry_count` to 0
-- Update `last_task_count` = 8
-- `awaiting_session_id` = true
+Provider return:
+- `status=success`, `provider_used=claude_export`, `new_conductor_pid=52847`, `session_id_mode=rediscover`
 </core>
 </section>
 
 <section id="monitoring-relaunch">
 <core>
-## Step 3: Relaunch Monitoring Layers
+## Step 3: Shared Wrap-Up and Monitoring Relaunch
+
+Shared wrap-up applies retry tracking and relaunches monitoring layers (see `references/recovery-wrap-up.md`).
+
+Retry tracking:
+- `last_task_count` was 2, watcher reported 8 → new tasks appeared → reset `retry_count` to 0
+- Update `last_task_count` = 8
+- `session_id_mode=rediscover` → set `awaiting_session_id=true`
 
 ### Launch New Watcher (awaiting mode)
 ```python
@@ -140,16 +147,16 @@ The new watcher will wait ~240 seconds, then begin polling. If the new Conductor
 <context>
 ## Summary
 
-Conductor relaunch workflow:
+Conductor crash relaunch workflow (claude_export provider):
 1. Watcher detects stale heartbeat (>240s), exits with `CONDUCTOR_DEAD:heartbeat`
-2. Recovery router selects `claude_export` provider
-3. Kill old Conductor (guard with kill -0)
-4. Export conversation log via claude_export
-5. Size check (under 800k, no truncation needed)
-6. Launch new Conductor with Recovery Bootstrap Prompt (`--recovery-bootstrap`, crash reason)
-7. Retry tracking — new tasks appeared, counter stays at 0
-8. Launch new watcher (awaiting mode)
-9. Kill old teammate, launch new teammate
+2. Main session routes directly to `claude_export` provider (crash bypasses router preflight)
+3. Provider: kill old Conductor (guard with kill -0)
+4. Provider: export conversation log via claude_export
+5. Provider: size check (under 800k, no truncation needed)
+6. Provider: launch new Conductor with default recovery prompt (`--recovery-bootstrap`)
+7. Shared wrap-up: retry tracking — new tasks appeared, counter stays at 0
+8. Shared wrap-up: launch new watcher (awaiting mode)
+9. Shared wrap-up: kill old teammate, launch new teammate
 10. Return to idle
 
 Total main session context consumed: minimal — parsed one exit message, ran a few bash commands, launched two agents. The heavy lifting (conversation export, new Conductor bootstrap) happens outside the Souffleur's context.
