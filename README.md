@@ -9,8 +9,8 @@ Monitors Conductor liveness and recovers it on failure with provider-routed cont
 - Routes recovery through providers:
   - prefers Lethe compaction + relaunch when available
   - runs `claude_export` recovery with post-trim context gate
-  - escalates to standard `/compact` recovery when export route is unavailable or still too large
-- Estimates trimmed export context usage with compact-boundary-aware parsing before relaunch
+  - if trimmed export is not comprehensive enough (estimated context still above threshold), discards the export artifact and runs standard `/compact` on the original session
+- Estimates trimmed export context usage with compact-boundary-aware parsing before relaunch (`FORCE_COMPACT` threshold)
 - Supports degraded heartbeat-only monitoring mode when Lethe relaunch succeeds but PID cannot be resolved
 - Tracks consecutive failures and alerts on retry exhaustion
 - Enforces external launch permission ceiling via `.orchestra_configs/souffleur` (`MAX_EXTERNAL_PERMISSION`)
