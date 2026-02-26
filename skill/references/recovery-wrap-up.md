@@ -1,4 +1,4 @@
-<skill name="souffleur-recovery-wrap-up" version="1.0">
+<skill name="souffleur-recovery-wrap-up" version="1.1">
 
 <metadata>
 type: reference
@@ -18,7 +18,12 @@ tier: 3
 <context>
 # Reference: Recovery Wrap-Up
 
-Shared post-provider steps run after either recovery provider returns.
+Shared post-provider steps run after recovery provider execution.
+
+Applies to:
+- Lethe provider
+- claude_export provider (gate pass)
+- standard_compact provider (normal or already-killed entry)
 
 This reference intentionally excludes provider-specific relaunch mechanics.
 Provider outputs are treated as inputs here.
@@ -95,6 +100,7 @@ If watcher launch fails, do not kill old teammate. Keep existing monitoring aliv
 On successful wrap-up:
 - increment `relaunch_generation`
 - clear `active_recovery_provider`
+- clear `compact_entry_mode`
 - return to WATCHING idle state
 
 At re-entry, main session state should contain:

@@ -1,4 +1,4 @@
-<skill name="souffleur-conductor-launch-prompts" version="1.2">
+<skill name="souffleur-conductor-launch-prompts" version="1.3">
 
 <metadata>
 type: reference
@@ -9,14 +9,22 @@ tier: 3
 <sections>
 - overview
 - default-resume-prompt
+- permission-ceiling
 - claude-export-launch-template
+- standard-compact-resume-template
 </sections>
 
 <section id="overview">
 <context>
 # Reference: Conductor Launch Prompts
 
-Contains the prompt defaults and launch template fields used when the Souffleur relaunches a Conductor generation. The claude_export provider uses this template directly. The Lethe provider may pass a prompt through to Lethe for resumed-session launch handling.
+Contains prompt defaults and launch template fields used when Souffleur relaunches
+Conductor generations.
+
+- `claude_export` provider uses fresh-session relaunch template.
+- `standard-compact` provider uses resumed-session relaunch template.
+- Lethe provider may pass prompt and permission values through to Lethe, but Lethe
+  remains authoritative for its own internal launch behavior.
 </context>
 </section>
 
@@ -36,6 +44,24 @@ The first line must be `/conductor --recovery-bootstrap` so the resumed Conducto
 </mandatory>
 </section>
 
+<section id="permission-ceiling">
+<mandatory>
+## Permission Ceiling
+
+All external session launches must enforce:
+
+```text
+effective_permission = min(requested_permission, MAX_EXTERNAL_PERMISSION)
+```
+
+Ordering:
+- `acceptEdits < bypassPermissions`
+
+`MAX_EXTERNAL_PERMISSION` is resolved by `scripts/souffleur-config.py`.
+Fallback default: `acceptEdits`.
+</mandatory>
+</section>
+
 <section id="claude-export-launch-template">
 <core>
 ## claude_export Launch Template
@@ -43,7 +69,7 @@ The first line must be `/conductor --recovery-bootstrap` so the resumed Conducto
 Used by `claude-export-recovery-provider.md`. Substitute placeholders:
 
 - `{N}` — relaunch generation number
-- `{PERMISSION_MODE}` — `permission_mode` from payload or default `acceptEdits`
+- `{EFFECTIVE_PERMISSION}` — permission after max-ceiling clamp
 - `{RESUME_PROMPT}` — payload prompt or default prompt
 - `{RECOVERY_REASON}` — crash/context-recovery reason line
 - `{EXPORT_PATH}` — claude_export output path
@@ -52,7 +78,7 @@ Used by `claude-export-recovery-provider.md`. Substitute placeholders:
 ```bash
 kitty --directory /home/kyle/claude/remindly \
   --title "Conductor (S{N})" -- \
-  env -u CLAUDECODE claude --permission-mode {PERMISSION_MODE} "{RESUME_PROMPT}
+  env -u CLAUDECODE claude --permission-mode {EFFECTIVE_PERMISSION} "{RESUME_PROMPT}
 
 {RECOVERY_REASON}
 
@@ -73,6 +99,35 @@ echo $! > temp/souffleur-conductor.pid
 - `CONDUCTOR_DEAD:pid` or `CONDUCTOR_DEAD:heartbeat` -> `Your previous Conductor session crashed or became unresponsive.`
 - `CONTEXT_RECOVERY` -> `Your predecessor requested a fresh session due to high context usage. This is a planned handoff, not a crash.`
 </guidance>
+</section>
+
+<section id="standard-compact-resume-template">
+<core>
+## Standard Compact Resume Template
+
+Used by `standard-compact-recovery-provider.md` after `/compact` completes.
+This relaunch resumes the compacted original session (same session ID).
+
+Substitute placeholders:
+
+- `{N}` — relaunch generation number
+- `{SESSION_ID}` — original Conductor session ID (resumed)
+- `{EFFECTIVE_PERMISSION}` — permission after max-ceiling clamp
+- `{RESUME_PROMPT}` — payload prompt or default prompt
+- `{RECOVERY_REASON}` — context line for operator clarity
+
+```bash
+kitty --directory /home/kyle/claude/remindly \
+  --title "Conductor (S{N})" -- \
+  env -u CLAUDECODE claude --resume {SESSION_ID} --permission-mode {EFFECTIVE_PERMISSION} "{RESUME_PROMPT}
+
+{RECOVERY_REASON}
+
+This session was compacted in-place. Use comms-link state to verify in-flight tasks
+and continue orchestration." &
+echo $! > temp/souffleur-conductor.pid
+```
+</core>
 
 <mandatory>
 After launch, provider control returns to `recovery-wrap-up.md` for retry tracking and monitoring-layer relaunch.

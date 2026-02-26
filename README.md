@@ -8,9 +8,11 @@ Monitors Conductor liveness and recovers it on failure with provider-routed cont
 - Monitors Conductor via three-layer architecture (watcher, self-monitor, main session)
 - Routes recovery through providers:
   - prefers Lethe compaction + relaunch when available
-  - falls back to `claude_export` recovery when Lethe is unavailable or pre-relaunch launch fails
+  - runs `claude_export` recovery with post-trim context gate
+  - escalates to standard `/compact` recovery when export route is unavailable or still too large
 - Supports degraded heartbeat-only monitoring mode when Lethe relaunch succeeds but PID cannot be resolved
 - Tracks consecutive failures and alerts on retry exhaustion
+- Enforces external launch permission ceiling via `.orchestra_configs/souffleur` (`MAX_EXTERNAL_PERMISSION`)
 
 ## Structure
 

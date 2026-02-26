@@ -45,12 +45,13 @@ Router sets `active_recovery_provider = claude_export` and executes the fallback
 <core>
 ## Step 2: claude_export Provider Executes
 
-Provider runs its four-step sequence (see `references/claude-export-recovery-provider.md`):
+Provider runs kill/export/trim and post-trim estimation gate (see `references/claude-export-recovery-provider.md`):
 
 1. `kill -0 45231 && kill 45231`
 2. `claude_export abc12345-def6-7890-ghij-klmnopqrstuv`
 3. size check (under 800k — use as-is)
-4. relaunch Conductor with defaults:
+4. estimate gate pass (`estimated_tokens <= threshold`)
+5. relaunch Conductor with defaults:
    - permission: `acceptEdits` (default, no payload)
    - prompt: default `/conductor --recovery-bootstrap ...`
 
@@ -90,7 +91,7 @@ Preflight-failure fallback path:
 2. Recovery router runs Lethe preflight
 3. Preflight fails (Lethe unavailable)
 4. Router selects claude_export provider directly — no Lethe launch attempted
-5. claude_export provider runs kill/export/size-check/relaunch
+5. claude_export provider runs kill/export/trim/gate/relaunch
 6. Shared wrap-up relaunches monitoring layers
 7. Souffleur returns to WATCHING
 

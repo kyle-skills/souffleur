@@ -68,7 +68,9 @@ Relevant fields:
 
 Defaults:
 - If `resume_prompt` missing, use shared default prompt from `conductor-launch-prompts.md`.
-- `permission_mode` may be forwarded to Lethe, but Lethe is authoritative for final permission resolution behavior.
+- `permission_mode` may be forwarded to Lethe, but Souffleur must first clamp any
+  requested value to `MAX_EXTERNAL_PERMISSION`.
+- Lethe remains authoritative for its internal permission-resolution behavior after launch.
 </core>
 </section>
 

@@ -4,12 +4,13 @@ description: >-
   This skill should be used when the Conductor launches a watchdog session via
   "/souffleur PID:$PID SESSION_ID:$SESSION_ID". Monitors Conductor liveness
   using a three-layer monitoring architecture and recovers Conductor sessions
-  via a provider router: prefer Lethe compaction when available, otherwise use
-  claude_export relaunch.
-version: 1.2
+  via a provider router: prefer Lethe compaction when available, use
+  claude_export with post-trim gating, then escalate to standard compact when
+  needed.
+version: 1.3
 ---
 
-<skill name="souffleur" version="1.2">
+<skill name="souffleur" version="1.3">
 
 <metadata>
 type: skill
@@ -40,12 +41,18 @@ tier: 3
 - A watcher must always be running while the Souffleur is in WATCHING state
 - The main session must stay near-zero context — delegate all polling to subagents
 - Guard PID kills with `kill -0` before `kill` — never kill blindly
+- Resolve config using `skill/scripts/souffleur-config.py` (default `FORCE_COMPACT=400000`, `MAX_EXTERNAL_PERMISSION=acceptEdits`)
+- Never launch any external Claude session above `MAX_EXTERNAL_PERMISSION`
 - The `awaiting_session_id` flag is `true` for exactly one watcher generation after each Conductor relaunch that needs session ID rediscovery
 - New watcher launches BEFORE old teammate is killed — ordering invariant is non-negotiable
 - All subagents and teammates must use `model="opus"` — sonnet is insufficient for orchestration
 - Recovery providers are mutually exclusive per recovery event cycle
 - Lethe launch failure before relaunch starts gets one retry, then fallback to claude_export provider
 - No double-relaunch: once Lethe has started a new Conductor generation, do not execute claude_export for that cycle
+- claude_export gate uses trimmed export estimate (`chars / 3`) and escalates to standard compact when threshold is exceeded
+- If no compact marker is found in export artifact, estimate from start-of-file (full parsed chain scope)
+- Standard compact escalation with `already_killed=true` skips only compact Step 1 (kill), not baseline/watcher/detection/relaunch steps
+- Standard compact failure policy: one retry, then fail closed
 - If Lethe succeeds but no PID is available after one discovery attempt, switch to heartbeat-only watcher mode and emit a warning message
 - Default recovery prompt (when not provided) must begin with `/conductor --recovery-bootstrap`
 - The Souffleur does not perform implementation work — it only watches, recovers, and exits
@@ -131,6 +138,9 @@ When the watcher exits with `CONTEXT_RECOVERY`, route recovery through provider 
 ### Router Inputs
 
 - Internal state: `conductor_pid`, `conductor_session_id`, `relaunch_generation`, retry/task counters
+- Config state from `souffleur-config.py`:
+  - `force_compact_threshold_tokens`
+  - `max_external_permission`
 - Optional payload from latest Souffleur instruction message:
   - `permission_mode`
   - `resume_prompt`
@@ -152,11 +162,12 @@ Parsing rules:
 
 ### Router Sequence
 
-1. Resolve payload/defaults (see database-queries and provider references).
+1. Resolve payload/defaults and configuration.
 2. Run Lethe preflight (strict soft dependency check).
 3. If preflight passes: set `active_recovery_provider = lethe`, run Lethe provider.
 4. If preflight fails: set `active_recovery_provider = claude_export`, run claude_export provider.
-5. Execute shared wrap-up sequence (clears `active_recovery_provider` on completion).
+5. If claude_export returns `status=escalate`: set `active_recovery_provider = standard_compact`, run standard compact provider.
+6. Execute shared wrap-up sequence (clears `active_recovery_provider` on completion).
 
 Lethe preflight is selection-time only. It does not commit to relaunch. `active_recovery_provider` enforces the no-double-relaunch rule: if Lethe starts a relaunch generation, the guard value prevents claude_export from executing in the same cycle even if Lethe reports a partial failure.
 </core>
@@ -170,7 +181,11 @@ Lethe provider procedure: preflight, launch attempts, completion contract, PID r
 </reference>
 
 <reference path="references/claude-export-recovery-provider.md" load="required">
-claude_export provider procedure: kill/export/size check/relaunch and default prompt+permission handling.
+claude_export provider procedure: kill/export/trim/gate and launch-or-escalate behavior.
+</reference>
+
+<reference path="references/standard-compact-recovery-provider.md" load="required">
+Standard compact provider procedure: baseline, compact watcher, `/compact` launch, completion detection, resumed relaunch, retry/fail-closed policy.
 </reference>
 </section>
 
@@ -181,7 +196,8 @@ claude_export provider procedure: kill/export/size check/relaunch and default pr
 ### Provider Summary
 
 - **Lethe provider (preferred):** compacts and relaunches through a teammate workflow.
-- **claude_export provider (fallback):** uses export transcript and relaunch prompt workflow.
+- **claude_export provider (fallback/first-pass):** uses export transcript, then post-trim estimation gate.
+- **standard_compact provider (escalation/fallback):** compacts in-place with `/compact` and resumes original session.
 
 ### Common Provider Inputs
 
@@ -189,16 +205,20 @@ Both providers receive from the recovery router:
 - `conductor_pid`, `conductor_session_id`, `relaunch_generation`
 - `retry_count`, `last_task_count`, `current_task_count`
 - Optional payload fields: `permission_mode`, `resume_prompt` (resolved from `CONTEXT_RECOVERY_PAYLOAD_V1` or defaults)
+- Config values: `force_compact_threshold_tokens`, `max_external_permission`
 
 Retry and task counters are passed through to wrap-up for progress tracking. Providers themselves use PID, session ID, generation, and payload fields for their core operations.
 
 ### Shared Return Contract
 
-Both providers return enough data for shared monitoring re-entry:
+Providers return enough data for shared monitoring re-entry:
 - `status`: success or failure
-- `provider_used`: lethe or claude_export
+- `provider_used`: lethe, claude_export, or standard_compact
 - `new_conductor_pid`: PID when known, null when unresolved
 - `session_id_mode`: `reused` or `rediscover`
+
+`claude_export` may also return `status=escalate` with `next_provider=standard_compact`
+when gate threshold is exceeded or export path is unavailable.
 
 Lethe provider can return `new_conductor_pid = null` when unavailable. In that case the router runs one PID discovery attempt. If still unresolved, the Souffleur transitions to heartbeat-only watcher mode and logs a warning.
 </core>
@@ -212,7 +232,7 @@ Default recovery prompt text and claude_export launch template fields.
 </reference>
 
 <guidance>
-See examples/example-context-recovery.md for Lethe-primary flow and recovery-wrap-up integration.
+See examples/example-context-recovery.md for Lethe-primary flow, examples/example-export-gate-escalation.md for export-threshold escalation, and examples/example-standard-compact-fail-closed.md for compact retry exhaustion behavior.
 </guidance>
 </section>
 
@@ -239,11 +259,11 @@ VALIDATING → SETTLING → WATCHING → EXITED
 
 | Event | Exit Reason | Action |
 |---|---|---|
-| Watcher exits | `CONDUCTOR_DEAD:pid` | Recovery via claude_export provider |
-| Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Recovery via claude_export provider |
+| Watcher exits | `CONDUCTOR_DEAD:pid` | Recovery via claude_export provider, then standard compact if export gate/escalation triggers |
+| Watcher exits | `CONDUCTOR_DEAD:heartbeat` | Recovery via claude_export provider, then standard compact if export gate/escalation triggers |
 | Watcher exits | `SESSION_ID_FOUND:{id}` | Update session ID, new watcher (normal mode) |
 | Watcher exits | `CONDUCTOR_COMPLETE` | Clean shutdown |
-| Watcher exits | `CONTEXT_RECOVERY` | Recovery router (Lethe preferred, fallback to claude_export pre-relaunch only) |
+| Watcher exits | `CONTEXT_RECOVERY` | Recovery router (Lethe preferred, claude_export, then standard compact) |
 | Teammate message | `WATCHER_DEAD` | New watcher (same mode), kill+relaunch teammate |
 
 ### Tracked State
@@ -259,7 +279,10 @@ Minimal state held in-session between cycles:
 | `awaiting_session_id` | True when session ID rediscovery is required | Provider-dependent in wrap-up |
 | `relaunch_generation` | Counter for kitty window titles (S2, S3...) | On successful relaunch |
 | `watcher_mode` | `normal` or `heartbeat-only` | On PID resolution outcome |
-| `active_recovery_provider` | Double-relaunch guard: current provider or null (`lethe`/`claude_export`/null) | Set on provider entry, cleared on wrap-up completion |
+| `active_recovery_provider` | Double-relaunch guard: current provider or null (`lethe`/`claude_export`/`standard_compact`/null) | Set on provider entry, cleared on wrap-up completion |
+| `compact_entry_mode` | `normal` or `already_killed` for standard compact provider | On escalation/provider entry |
+| `force_compact_threshold_tokens` | Post-trim export gate threshold | On config resolution |
+| `max_external_permission` | Launch permission ceiling | On config resolution |
 </core>
 </section>
 
@@ -294,6 +317,12 @@ If no valid `CONTEXT_RECOVERY_PAYLOAD_V1` message is found, defaults apply and r
 
 ### Lethe relaunch succeeded but PID unavailable
 The Souffleur attempts one PID discovery scan. If it still cannot resolve a PID, it switches to heartbeat-only watcher mode and emits a warning message. It does not execute a second recovery provider for the same cycle.
+
+### Trimmed export still too large
+If claude_export produces a trimmed artifact that still exceeds configured threshold (estimated with `chars / 3` from latest compact marker or file start), Souffleur discards the export artifact and escalates to standard compact.
+
+### Standard compact failed twice
+After one retry, a second compact failure causes fail-closed behavior: set Souffleur state to `error`, insert diagnostic message, and stop relaunch attempts for that cycle.
 
 ### Multiple watcher exits queued
 Events are handled sequentially. Recovery steps are idempotent where possible. Stale queued `WATCHER_DEAD` messages are ignored when watcher heartbeat is already fresh.

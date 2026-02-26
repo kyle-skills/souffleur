@@ -10,6 +10,7 @@ tier: 3
 - overview
 - watcher-prompt-normal
 - watcher-prompt-heartbeat-only
+- compact-watcher-prompt
 - teammate-prompt
 </sections>
 
@@ -109,6 +110,42 @@ Report the current task count in your exit message for retry tracking.
 
 <mandatory>
 Heartbeat-only mode is degraded monitoring. It is only valid when Souffleur has already logged a warning about unresolved PID after recovery.
+</mandatory>
+</section>
+
+<section id="compact-watcher-prompt">
+<core>
+## Compact Watcher Prompt
+
+Launch with: `Task(subagent_type="general-purpose", model="opus", run_in_background=True)`
+
+Substitute `{JSONL_PATH}` and `{BASELINE_LINES}` before launching.
+
+```
+Monitor JSONL for compact completion.
+
+JSONL path: {JSONL_PATH}
+Baseline lines: {BASELINE_LINES}
+Timeout: 300 seconds
+
+Every ~1 second:
+1. Read lines with index > baseline
+2. Parse each line as JSON (skip malformed lines)
+3. If a line matches:
+   {"type":"system","subtype":"compact_boundary"}
+   then EXIT immediately and report:
+   "COMPACT_COMPLETE"
+
+If timeout expires before compact_boundary appears:
+EXIT and report:
+"COMPACT_TIMEOUT"
+
+Do not emit additional messages after reporting a terminal result.
+```
+</core>
+
+<mandatory>
+Watcher must start before launching `claude --resume {SESSION_ID} \"/compact\"`.
 </mandatory>
 </section>
 

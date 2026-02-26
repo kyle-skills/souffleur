@@ -71,7 +71,8 @@ Fallback provider runs:
 1. `kill -0 45231 && kill 45231`
 2. `claude_export abc12345-def6-7890-ghij-klmnopqrstuv`
 3. size check and truncation policy
-4. relaunch Conductor with defaults:
+4. post-trim estimate gate (`estimated_tokens <= threshold`)
+5. relaunch Conductor with defaults:
    - permission: `acceptEdits` (if payload omitted)
    - prompt: default `/conductor --recovery-bootstrap ...`
 

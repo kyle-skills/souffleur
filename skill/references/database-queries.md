@@ -1,4 +1,4 @@
-<skill name="souffleur-database-queries" version="1.2">
+<skill name="souffleur-database-queries" version="1.3">
 
 <metadata>
 type: reference
@@ -20,7 +20,12 @@ tier: 3
 <context>
 # Reference: Database Queries
 
-All SQL patterns the Souffleur uses against `orchestration_tasks` and `orchestration_messages` via comms-link. Every INSERT into `orchestration_messages` must include `message_type`. Every state transition must include `last_heartbeat = datetime('now')`.
+All SQL patterns Souffleur uses against `orchestration_tasks` and
+`orchestration_messages` via comms-link.
+
+Rules:
+- Every INSERT into `orchestration_messages` must include `message_type`.
+- Every state transition must include `last_heartbeat = datetime('now')`.
 </context>
 </section>
 
@@ -60,7 +65,7 @@ WHERE task_id = 'souffleur'
 ORDER BY timestamp DESC LIMIT 1;
 ```
 
-### Terminal Failure
+### Terminal Validation Failure
 ```sql
 UPDATE orchestration_tasks
 SET state = 'exited', last_heartbeat = datetime('now')
@@ -82,8 +87,6 @@ VALUES ('souffleur', '$CLAUDE_SESSION_ID',
 
 ### Read Latest Recovery Payload
 
-Read most recent context-recovery payload for Souffleur:
-
 ```sql
 SELECT message FROM orchestration_messages
 WHERE task_id = 'souffleur'
@@ -94,9 +97,7 @@ ORDER BY timestamp DESC LIMIT 1;
 
 If no row is returned, use provider defaults.
 
-### Emit Degraded Monitoring Warning
-
-When Lethe relaunch succeeds but PID remains unresolved after one discovery attempt:
+### Emit Degraded Monitoring Warning (Lethe PID unresolved)
 
 ```sql
 INSERT INTO orchestration_messages (task_id, from_session, message, message_type)
@@ -105,6 +106,31 @@ VALUES ('souffleur', '$CLAUDE_SESSION_ID',
      Switched watcher to heartbeat-only mode for this generation.
      PID liveness checks are temporarily disabled.',
     'warning');
+```
+
+### Emit Export Gate Escalation Notice
+
+```sql
+INSERT INTO orchestration_messages (task_id, from_session, message, message_type)
+VALUES ('souffleur', '$CLAUDE_SESSION_ID',
+    'SOUFFLEUR WARNING: Trimmed claude_export output exceeded configured context threshold.
+     Discarded export artifact and escalated recovery to standard compact route.',
+    'warning');
+```
+
+### Fail Closed After Compact Retry Exhaustion
+
+```sql
+UPDATE orchestration_tasks
+SET state = 'error', last_heartbeat = datetime('now')
+WHERE task_id = 'souffleur';
+
+INSERT INTO orchestration_messages (task_id, from_session, message, message_type)
+VALUES ('souffleur', '$CLAUDE_SESSION_ID',
+    'SOUFFLEUR ERROR: Standard compact recovery failed after 2 attempts.
+     Cycle failed closed to prevent unsafe relaunch.
+     Manual intervention required.',
+    'error');
 ```
 </core>
 </section>
@@ -192,14 +218,15 @@ WHERE task_id = 'souffleur';
 <mandatory>
 ## Message Types
 
-Every INSERT into `orchestration_messages` must include `message_type`. The Souffleur uses these types:
+Every INSERT into `orchestration_messages` must include `message_type`.
+Souffleur uses these types:
 
 | Type | Direction | Usage |
 |---|---|---|
-| `error` | Souffleur -> Conductor | Validation failures, terminal messages |
+| `error` | Souffleur -> Conductor | Validation failures, fail-closed, terminal messages |
 | `instruction` | Conductor -> Souffleur | Corrected args and context-recovery payload |
 | `completion` | Souffleur -> Conductor | Clean shutdown notification |
-| `warning` | Souffleur -> Conductor | Degraded monitoring mode notice |
+| `warning` | Souffleur -> Conductor | Degraded monitoring or export gate escalation |
 
 Never insert a message with NULL `message_type`.
 </mandatory>

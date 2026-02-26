@@ -1,4 +1,4 @@
-<skill name="souffleur-conductor-relaunch" version="1.2">
+<skill name="souffleur-conductor-relaunch" version="1.3">
 
 <metadata>
 type: reference
@@ -33,8 +33,10 @@ Use these files instead:
 1. `references/lethe-recovery-provider.md`
    - Lethe preflight, launch, completion contract, PID resolution, degraded mode
 2. `references/claude-export-recovery-provider.md`
-   - kill/export/size-check/relaunch fallback path
-3. `references/recovery-wrap-up.md`
+   - kill/export/trim/gate and launch-or-escalate path
+3. `references/standard-compact-recovery-provider.md`
+   - baseline/watcher/compact/detect/relaunch fallback and escalation path
+4. `references/recovery-wrap-up.md`
    - shared retry tracking and monitoring layer relaunch
 
 All `CONTEXT_RECOVERY` handling must flow through the recovery router in `SKILL.md`.

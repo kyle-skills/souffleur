@@ -52,7 +52,8 @@ The Souffleur main session receives the watcher's exit.
 <core>
 ## Step 2: claude_export Provider Executes
 
-The `claude_export` provider runs its four-step sequence (see `references/claude-export-recovery-provider.md`).
+The `claude_export` provider runs kill/export/trim, then applies the post-trim
+estimation gate (see `references/claude-export-recovery-provider.md`).
 
 ### Step 2.1 — Kill Old Conductor
 ```bash
@@ -72,7 +73,18 @@ wc -c < ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 # Output: 523000 (under 800k — use as-is)
 ```
 
-### Step 2.4 — Launch New Conductor
+### Step 2.4 — Post-Trim Estimate Gate
+
+Estimator runs on trimmed artifact:
+
+```bash
+python3 skill/scripts/souffleur-estimate-export.py ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
+# Output: estimated_tokens=171224, threshold=400000 (gate pass)
+```
+
+Because gate passes, provider launches from export path.
+
+### Step 2.5 — Launch New Conductor
 
 The exit reason is `CONDUCTOR_DEAD:heartbeat`, so `{RECOVERY_REASON}` is substituted with the crash reason line.
 
@@ -147,17 +159,18 @@ The new watcher will wait ~240 seconds, then begin polling. If the new Conductor
 <context>
 ## Summary
 
-Conductor crash relaunch workflow (claude_export provider):
+Conductor crash relaunch workflow (claude_export provider, gate-pass branch):
 1. Watcher detects stale heartbeat (>240s), exits with `CONDUCTOR_DEAD:heartbeat`
 2. Main session routes directly to `claude_export` provider (crash bypasses router preflight)
 3. Provider: kill old Conductor (guard with kill -0)
 4. Provider: export conversation log via claude_export
 5. Provider: size check (under 800k, no truncation needed)
-6. Provider: launch new Conductor with default recovery prompt (`--recovery-bootstrap`)
-7. Shared wrap-up: retry tracking — new tasks appeared, counter stays at 0
-8. Shared wrap-up: launch new watcher (awaiting mode)
-9. Shared wrap-up: kill old teammate, launch new teammate
-10. Return to idle
+6. Provider: post-trim estimate gate passes (under threshold)
+7. Provider: launch new Conductor with default recovery prompt (`--recovery-bootstrap`)
+8. Shared wrap-up: retry tracking — new tasks appeared, counter stays at 0
+9. Shared wrap-up: launch new watcher (awaiting mode)
+10. Shared wrap-up: kill old teammate, launch new teammate
+11. Return to idle
 
 Total main session context consumed: minimal — parsed one exit message, ran a few bash commands, launched two agents. The heavy lifting (conversation export, new Conductor bootstrap) happens outside the Souffleur's context.
 </context>

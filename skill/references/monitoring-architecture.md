@@ -170,8 +170,8 @@ Orchestrates the other two layers. Sits idle between events.
 | Teammate message | Teammate | Watcher is dead | Relaunch watcher, kill+relaunch teammate |
 
 **Routing watcher exits:**
-- `CONDUCTOR_DEAD` -> route to claude_export provider recovery
-- `CONTEXT_RECOVERY` -> route through recovery router (Lethe preferred)
+- `CONDUCTOR_DEAD` -> route to claude_export provider first, then standard-compact escalation if export path is unavailable or gate-fails
+- `CONTEXT_RECOVERY` -> route through recovery router (Lethe preferred, claude_export + standard-compact fallback chain)
 - `SESSION_ID_FOUND:{id}` -> update `conductor_session_id`, launch new watcher (normal mode, `awaiting_session_id=false`)
 - `CONDUCTOR_COMPLETE` -> clean shutdown (kill teammate, set Souffleur row to `complete`, exit)
 
