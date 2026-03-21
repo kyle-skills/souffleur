@@ -120,14 +120,14 @@ Expected output path:
 <core>
 ## Step 3 — Size Check and Truncation
 
-Approximate 200k tokens as ~800k characters.
+Approximate 1M tokens as ~4M characters.
 
 ```bash
 wc -c < ~/Documents/claude_exports/${SESSION_ID}_clean.md
 ```
 
-- Under 800,000 chars: use file as-is.
-- Over 800,000 chars: preserve top summary section plus newest ~800,000 chars.
+- Under 4,000,000 chars: use file as-is.
+- Over 4,000,000 chars: preserve top summary section plus newest ~4,000,000 chars.
 
 This trim is pre-gate normalization only. Gate decision still runs after trim.
 </core>
