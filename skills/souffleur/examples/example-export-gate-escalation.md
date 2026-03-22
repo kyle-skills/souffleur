@@ -40,7 +40,7 @@ Provider executes:
 Then estimator runs on trimmed artifact:
 
 ```bash
-python3 skill/scripts/souffleur-estimate-export.py ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
+python3 skills/souffleur/scripts/souffleur-estimate-export.py ~/Documents/claude_exports/abc12345-def6-7890-ghij-klmnopqrstuv_clean.md
 ```
 
 Output (example):

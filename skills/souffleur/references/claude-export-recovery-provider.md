@@ -70,7 +70,7 @@ Before launch/gate decisions:
 1. Resolve config:
 
 ```bash
-python3 skill/scripts/souffleur-config.py --project-dir /home/kyle/claude/remindly
+python3 skills/souffleur/scripts/souffleur-config.py --project-dir /home/kyle/claude/remindly
 ```
 
 2. Read:
@@ -140,7 +140,7 @@ This trim is pre-gate normalization only. Gate decision still runs after trim.
 Run Souffleur estimator on the trimmed export artifact:
 
 ```bash
-python3 skill/scripts/souffleur-estimate-export.py ~/Documents/claude_exports/${SESSION_ID}_clean.md
+python3 skills/souffleur/scripts/souffleur-estimate-export.py ~/Documents/claude_exports/${SESSION_ID}_clean.md
 ```
 
 Estimator rules:

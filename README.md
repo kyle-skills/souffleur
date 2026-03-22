@@ -112,7 +112,7 @@ After any provider completes, shared wrap-up handles retry tracking, session ID 
 
 ## Configuration
 
-Configuration is resolved via `skill/scripts/souffleur-config.py` from `.orchestra_configs/souffleur`:
+Configuration is resolved via `skills/souffleur/scripts/souffleur-config.py` from `.orchestra_configs/souffleur`:
 
 | Key | Default | Purpose |
 |---|---|---|
@@ -160,7 +160,7 @@ No other scenario causes the Souffleur to exit. Watcher deaths and teammate mess
 ## Validation Script
 
 ```bash
-bash skill/scripts/validate-souffleur-state.sh [PID]
+bash skills/souffleur/scripts/validate-souffleur-state.sh [PID]
 ```
 
 Spot-checks database consistency for the Souffleur row. Optional PID argument for targeted Conductor validation.

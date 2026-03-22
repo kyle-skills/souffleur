@@ -1,0 +1,13 @@
+{
+  "name": "souffleur",
+  "description": "Conductor liveness watchdog and recovery for The Elevated Stage",
+  "version": "1.0.0",
+  "author": {
+    "name": "The Elevated Stage",
+    "url": "https://github.com/The-Elevated-Stage"
+  },
+  "homepage": "https://github.com/The-Elevated-Stage/souffleur",
+  "repository": "https://github.com/The-Elevated-Stage/souffleur.git",
+  "license": "MIT",
+  "keywords": ["orchestration", "watchdog", "recovery", "elevated-stage"]
+}

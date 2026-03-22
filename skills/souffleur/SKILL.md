@@ -41,7 +41,7 @@ tier: 3
 - A watcher must always be running while the Souffleur is in WATCHING state
 - The main session must stay near-zero context — delegate all polling to subagents
 - Guard PID kills with `kill -0` before `kill` — never kill blindly
-- Resolve config using `skill/scripts/souffleur-config.py` (default `FORCE_COMPACT=400000`, `MAX_EXTERNAL_PERMISSION=acceptEdits`)
+- Resolve config using `skills/souffleur/scripts/souffleur-config.py` (default `FORCE_COMPACT=400000`, `MAX_EXTERNAL_PERMISSION=acceptEdits`)
 - Never launch any external Claude session above `MAX_EXTERNAL_PERMISSION`
 - The `awaiting_session_id` flag is `true` for exactly one watcher generation after each Conductor relaunch that needs session ID rediscovery
 - New watcher launches BEFORE old teammate is killed — ordering invariant is non-negotiable
